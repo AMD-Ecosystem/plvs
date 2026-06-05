@@ -1,3 +1,4 @@
+#include "cuda_to_hip.h"
 #include "elas_gpu.h"
 
 //#define DEBUG 

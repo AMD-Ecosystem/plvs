@@ -3,6 +3,7 @@ project(libelas_gpu)
 
 set(CPP_STANDARD_VERSION "17" CACHE STRING "Desired C++ standard version") # need C++17 given the following error "nvcc fatal   : Value 'c++20' is not defined for option 'std'"
 set(WITH_GPU ON CACHE BOOL "Added GPU support")
+option(USE_HIP "Build with HIP for AMD GPUs" OFF)
 set(BUILD_WITH_MARCH_NATIVE ON  CACHE BOOL "Build with \"-march native\"")
 
 IF(NOT CMAKE_BUILD_TYPE)
@@ -14,13 +15,25 @@ ENDIF()
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Include libraries
-find_package(CUDA)
-if (CUDA_FOUND AND WITH_GPU)
-    set(USE_CUDA true)     # N.B.: here opencv libs are not used!
-    MESSAGE("USE_CUDA ${USE_CUDA}")
+if(USE_HIP)
+    cmake_minimum_required(VERSION 3.21)
+    enable_language(HIP)
+    if(NOT DEFINED CMAKE_HIP_ARCHITECTURES OR CMAKE_HIP_ARCHITECTURES STREQUAL "")
+        set(CMAKE_HIP_ARCHITECTURES "gfx90a")
+    endif()
+    message(STATUS "libelas-gpu: CMAKE_HIP_ARCHITECTURES: ${CMAKE_HIP_ARCHITECTURES}")
+    add_compile_definitions(USE_HIP)
+    set(USE_GPU true)
 else()
-    set(CUDA_LIBRARIES "")
-    MESSAGE("CUDA NOT FOUND!")
+    find_package(CUDA)
+    if (CUDA_FOUND AND WITH_GPU)
+        set(USE_CUDA true)     # N.B.: here opencv libs are not used!
+        set(USE_GPU true)
+        MESSAGE("USE_CUDA ${USE_CUDA}")
+    else()
+        set(CUDA_LIBRARIES "")
+        MESSAGE("CUDA NOT FOUND!")
+    endif()
 endif()
 
 # This option allows the generations of a file compile_commands.json in our build folder: that file contains the full command line to compile individual source files
@@ -119,7 +132,18 @@ set(sources_cpu
 
 
 
-if(USE_CUDA )
+if(USE_HIP)
+    # HIP build
+    set_source_files_properties(${sources_gpu} PROPERTIES LANGUAGE HIP)
+    set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD} -O3 -fPIC")
+
+    add_library(${PROJECT_NAME}
+        ${sources_gpu}
+        ${sources_cpu}
+    )
+    set_target_properties(${PROJECT_NAME} PROPERTIES HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}")
+
+elseif(USE_CUDA)
 
     # convert the gpu code to cpu code
     cuda_compile(sources_gpu_built ${sources_gpu})

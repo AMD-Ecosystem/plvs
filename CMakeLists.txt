@@ -15,6 +15,7 @@ set(WITH_LIBELAS        ON  CACHE BOOL "Add libelas support")  # for stereo dens
 set(WITH_LIBSGM         ON  CACHE BOOL "Add stereo libsgm support")  # for stereo dense reconstruction (it needs CUDA)
 set(WITH_OPENMP         ON  CACHE BOOL "Add OpenMP support") # useful for PCL (since we use the macro PCL_NO_PRECOMPILE!)
 set(WITH_CUDA           OFF CACHE BOOL "Add CUDA support")
+set(USE_HIP             OFF CACHE BOOL "Build with HIP for AMD GPUs")
 set(WITH_TRACY_PROFILER OFF CACHE BOOL "Add Tracy profiler support.")
 set(WITH_RERUN          OFF CACHE BOOL "Add Rerun support.")
 set(WITH_LOCAL_PCL      OFF  CACHE BOOL "Add local PCL support")
@@ -187,6 +188,43 @@ if (WITH_CUDA)
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_CUDA")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_CUDA")
+endif()
+
+#====================================
+# HIP (AMD GPU support)
+message(STATUS "USE_HIP: " ${USE_HIP})
+
+if(USE_HIP)
+    cmake_minimum_required(VERSION 3.21)
+    enable_language(HIP)
+
+    # Default arch when unset (gfx90a for CDNA2); configure with -DCMAKE_HIP_ARCHITECTURES=<arch>
+    if(NOT DEFINED CMAKE_HIP_ARCHITECTURES OR CMAKE_HIP_ARCHITECTURES STREQUAL "")
+        set(CMAKE_HIP_ARCHITECTURES "gfx90a")
+    endif()
+    message(STATUS "CMAKE_HIP_ARCHITECTURES: ${CMAKE_HIP_ARCHITECTURES}")
+
+    # Set files to build
+    set(HIP_SOURCES
+        src/cuda/Allocator_gpu.cu
+        src/cuda/Fast_gpu.cu
+        src/cuda/Orb_gpu.cu
+        src/cuda/Cuda.cu
+    )
+
+    # Mark .cu files as HIP language
+    set_source_files_properties(${HIP_SOURCES} PROPERTIES LANGUAGE HIP)
+
+    # Add USE_HIP define and include the compat header path
+    add_compile_definitions(USE_HIP)
+
+    # HIP compile options
+    set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD}")
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -O3")
+    else()
+        set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -g")
+    endif()
 endif()
 
 #====================================
@@ -592,13 +630,25 @@ src/g2o/types_seven_dof_expmap2.cpp
 #)
 
 if (WITH_CUDA)
-    cuda_compile(CUDA_OBJS ${CUDA_SOURCES}) 
+    cuda_compile(CUDA_OBJS ${CUDA_SOURCES})
 endif()
 
-add_library(${PROJECT_NAME} ${LIBRARY_TYPE}
-    ${CUDA_OBJS}
-    ${CPU_SOURCES}
-)
+if(USE_HIP)
+    add_library(${PROJECT_NAME} ${LIBRARY_TYPE}
+        ${HIP_SOURCES}
+        ${CPU_SOURCES}
+    )
+    set_target_properties(${PROJECT_NAME} PROPERTIES HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}")
+elseif(WITH_CUDA)
+    add_library(${PROJECT_NAME} ${LIBRARY_TYPE}
+        ${CUDA_OBJS}
+        ${CPU_SOURCES}
+    )
+else()
+    add_library(${PROJECT_NAME} ${LIBRARY_TYPE}
+        ${CPU_SOURCES}
+    )
+endif()
 
 target_link_libraries(${PROJECT_NAME}
 ${EXTERNAL_LIBS} ${EXTERNAL_CORE_LIBS})
