@@ -17,11 +17,24 @@ limitations under the License.
 #ifndef SGM_UTILITY_HPP
 #define SGM_UTILITY_HPP
 
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+#include <hip/hip_runtime.h>
+#else
 #include <cuda.h>
+#endif
 
 namespace sgm {
 
-static constexpr unsigned int WARP_SIZE = 32u;
+// Warp size: 64 on CDNA (wave64), 32 on RDNA and NVIDIA
+#if defined(__HIP_PLATFORM_AMD__)
+  #if defined(__GFX9__)
+    static constexpr unsigned int WARP_SIZE = 64u;   // CDNA: gfx90a, gfx94x
+  #else
+    static constexpr unsigned int WARP_SIZE = 32u;   // RDNA: gfx10xx, gfx11xx
+  #endif
+#else
+  static constexpr unsigned int WARP_SIZE = 32u;     // CUDA
+#endif
 
 namespace detail {
 	template <typename T, unsigned int GROUP_SIZE, unsigned int STEP>

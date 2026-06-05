@@ -58,6 +58,7 @@
 //
 //M*/
 
+#include "cuda_to_hip.h"
 #include "opencv2/core/cuda/common.hpp"
 #include "opencv2/core/cuda/utility.hpp"
 #include "opencv2/core/cuda/reduce.hpp"

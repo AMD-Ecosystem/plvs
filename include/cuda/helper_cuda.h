@@ -21,6 +21,45 @@
 #include <stdio.h>
 #include <string.h>
 
+// HIP-specific simplified implementation
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+
+#include <hip/hip_runtime.h>
+
+#define DEVICE_RESET
+
+template<typename T>
+void check(T result, char const *const func, const char *const file, int const line)
+{
+    if (result)
+    {
+        fprintf(stderr, "HIP error at %s:%d code=%d(%s) \"%s\" \n",
+                file, line, static_cast<unsigned int>(result),
+                hipGetErrorString((hipError_t)result), func);
+        exit(EXIT_FAILURE);
+    }
+}
+
+#define checkCudaErrors(val) check((val), #val, __FILE__, __LINE__)
+
+#define getLastCudaError(msg) do { \
+    hipError_t _err = hipGetLastError(); \
+    if (_err != hipSuccess) { \
+        fprintf(stderr, "%s(%i) : getLastCudaError() HIP error : %s : (%d) %s.\n", \
+                __FILE__, __LINE__, (msg), (int)_err, hipGetErrorString(_err)); \
+        exit(EXIT_FAILURE); \
+    } \
+} while(0)
+
+// Map CUDA device property types
+#define cudaDeviceProp hipDeviceProp_t
+#define cudaGetDeviceProperties hipGetDeviceProperties
+#define cudaGetDevice hipGetDevice
+#define cudaSetDevice hipSetDevice
+#define cudaGetDeviceCount hipGetDeviceCount
+
+#else  // CUDA build
+
 #include <cuda/helper_string.h>
 
 #ifndef EXIT_WAIVED
@@ -1306,5 +1345,6 @@ inline bool checkCudaCapabilities(int major_version, int minor_version)
 
 // end of CUDA Helper Functions
 
+#endif  // USE_HIP else (end of CUDA section)
 
-#endif
+#endif  // HELPER_CUDA_H
