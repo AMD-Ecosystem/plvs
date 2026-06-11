@@ -8,38 +8,18 @@
 
 #if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
 
-#include <hip/hip_runtime.h>
+// The PLVS device sources include OpenCV's CUDA module headers
+// (opencv2/core/cuda/{common,utility,reduce,functional}.hpp). On a ROCm build
+// of OpenCV those headers keep the CUDA runtime spellings and rely on OpenCV's
+// own installed shim to alias them to HIP. Pull that shim in so the texture,
+// channel-format, stream and runtime symbols OpenCV uses resolve identically
+// here as they do inside the OpenCV build.
+#include <opencv2/core/cuda/cuda_to_hip.h>
 
-// Runtime API
-#define cudaMalloc                      hipMalloc
+// Managed-memory aliases that the PLVS allocator uses but OpenCV does not, so
+// they are absent from OpenCV's shim.
 #define cudaMallocManaged               hipMallocManaged
-#define cudaFree                        hipFree
-#define cudaMemcpy                      hipMemcpy
-#define cudaMemcpyAsync                 hipMemcpyAsync
-#define cudaMemcpyToSymbol              hipMemcpyToSymbol
-#define cudaMemcpyHostToDevice          hipMemcpyHostToDevice
-#define cudaMemcpyDeviceToHost          hipMemcpyDeviceToHost
-#define cudaMemcpyDeviceToDevice        hipMemcpyDeviceToDevice
-#define cudaMemset                      hipMemset
-#define cudaMemsetAsync                 hipMemsetAsync
-
-// Streams
-#define cudaStream_t                    hipStream_t
-#define cudaStreamCreate                hipStreamCreate
-#define cudaStreamDestroy               hipStreamDestroy
-#define cudaStreamSynchronize           hipStreamSynchronize
 #define cudaStreamAttachMemAsync        hipStreamAttachMemAsync
-
-// Device synchronization
-#define cudaDeviceSynchronize           hipDeviceSynchronize
-#define cudaGetLastError                hipGetLastError
-
-// Error types
-#define cudaError_t                     hipError_t
-#define cudaSuccess                     hipSuccess
-#define cudaGetErrorString              hipGetErrorString
-
-// Memory attach flags
 #define cudaMemAttachGlobal             hipMemAttachGlobal
 
 #else

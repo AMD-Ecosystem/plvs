@@ -420,7 +420,7 @@ void GpuFast::detectAsync(InputArray _image)
 
     dim3 dimBlock(32, 8);
     dim3 dimGrid(divUp(image.cols, dimBlock.x), divUp(image.rows, dimBlock.y * 4));
-    tileCalcKeypoints_kernel << <dimGrid, dimBlock, 0, stream>>>(image, kpLoc, kpScore, maxKeypoints, highThreshold, lowThreshold, scoreMat, counter_ptr);
+    tileCalcKeypoints_kernel<<<dimGrid, dimBlock, 0, stream>>>(image, kpLoc, kpScore, maxKeypoints, highThreshold, lowThreshold, scoreMat, counter_ptr);
     checkCudaErrors(cudaGetLastError());
 }
 
@@ -548,13 +548,13 @@ void IC_Angle::launch_async(InputArray _image, KeyPoint * _keypoints, int npoint
     {
         dim3 block(256);
         dim3 grid(divUp(npoints, block.x));
-        addBorder_kernel << <grid, block, 0, stream>>>(keypoints, npoints, minBorderX, minBorderY, octave, size);
+        addBorder_kernel<<<grid, block, 0, stream>>>(keypoints, npoints, minBorderX, minBorderY, octave, size);
         checkCudaErrors(cudaGetLastError());
     }
     {
         dim3 block(32, 8);
         dim3 grid(divUp(npoints, block.y));
-        IC_Angle_kernel << <grid, block, 0, stream>>>(image, keypoints, npoints, half_k);
+        IC_Angle_kernel<<<grid, block, 0, stream>>>(image, keypoints, npoints, half_k);
         checkCudaErrors(cudaGetLastError());
     }
 }
