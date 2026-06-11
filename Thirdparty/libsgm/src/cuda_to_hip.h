@@ -22,6 +22,7 @@
 
 // Error handling
 #define cudaError_t                     hipError_t
+#define cudaError                       hipError_t
 #define cudaSuccess                     hipSuccess
 #define cudaGetLastError                hipGetLastError
 #define cudaGetErrorString              hipGetErrorString
@@ -35,10 +36,16 @@
 #define cudaMemcpyDeviceToHost          hipMemcpyDeviceToHost
 #define cudaMemcpyDeviceToDevice        hipMemcpyDeviceToDevice
 
-// For CUDA_VERSION checks, HIP uses HIP_VERSION which is structured differently.
-// Define CUDA_VERSION as >= 9000 for sync shuffle semantics on HIP.
+// The .cu sources gate the warp-synchronous shuffle variants
+// (__shfl_*_sync, which require an explicit lane mask) behind
+// CUDA_VERSION >= 9000 and fall back to the maskless __shfl_* forms
+// otherwise. On HIP the masked variants demand a 64-bit mask on wave64
+// hardware (a compile-time assert rejects the 32-bit 0xffffffff literals
+// these sources pass), and the maskless forms already carry the logical
+// width argument the algorithm needs, so select the pre-9000 branch by
+// leaving CUDA_VERSION at 0.
 #ifndef CUDA_VERSION
-#define CUDA_VERSION 11000
+#define CUDA_VERSION 0
 #endif
 
 // Helper macro for error checking

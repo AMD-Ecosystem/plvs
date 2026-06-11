@@ -162,7 +162,7 @@ void GpuOrb::launch_async(InputArray _image, const KeyPoint * _keypoints, const 
 
     dim3 dimBlock(32);
     dim3 dimGrid(npoints);
-    calcOrb_kernel << <dimGrid, dimBlock, 0, stream>>>(image, keypoints, npoints, desc);
+    calcOrb_kernel<<<dimGrid, dimBlock, 0, stream>>>(image, keypoints, npoints, desc);
     checkCudaErrors(cudaGetLastError());
 }
 
