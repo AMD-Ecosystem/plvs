@@ -218,6 +218,19 @@ if(USE_HIP)
     # Add USE_HIP define and include the compat header path
     add_compile_definitions(USE_HIP)
 
+    # Host C++ translation units that include OpenCV's cv::cuda headers (e.g.
+    # cuda_stream_accessor.hpp) must select the HIP runtime branch and resolve
+    # hip/hip_runtime.h. Define __HIP_PLATFORM_AMD__ and add the ROCm include path
+    # for the host compiler so those headers do not fall back to <cuda_runtime.h>.
+    find_path(HIP_INCLUDE_DIR hip/hip_runtime.h HINTS /opt/rocm/include)
+    add_compile_definitions(__HIP_PLATFORM_AMD__)
+    include_directories(${HIP_INCLUDE_DIR})
+
+    # Host TUs reach OpenCV cv::cuda headers and the project's cuda/{Fast,Orb}.hpp
+    # that use CUDA runtime spellings (cudaStream_t, ...). Force-include the
+    # CUDA->HIP alias shim into every TU so those resolve to the HIP runtime types.
+    add_compile_options(-include ${PROJECT_SOURCE_DIR}/src/cuda/cuda_to_hip.h)
+
     # HIP compile options
     set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD}")
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -239,6 +252,11 @@ find_package(Boost REQUIRED COMPONENTS thread system serialization)
 
 # Check fastfusion support and SIMD supports
 include(${CMAKE_MODULE_PATH}/CheckFastfusionSupport.cmake)
+# CheckFastfusionSupport sets BUILD_FASTFUSION from CPU SIMD alone; honor the
+# user-facing WITH_FASTFUSION toggle so the optional backend can be turned off.
+if(NOT WITH_FASTFUSION)
+    set(BUILD_FASTFUSION FALSE)
+endif()
 if(BUILD_FASTFUSION AND WITH_FASTFUSION)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_FASTFUSION")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_FASTFUSION")
@@ -357,18 +375,18 @@ endif()
 
 
 if(WITH_LIBSGM)
-    if(NOT CUDA_FOUND)
+    if(NOT CUDA_FOUND AND NOT USE_HIP)
         find_package(CUDA) # make the check if not already done above
     endif()
-    if(CUDA_FOUND)
+    if(CUDA_FOUND OR USE_HIP)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_LIBSGM")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LIBSGM")
-        message(STATUS "building with stereo libsgm CUDA ***************")
-        set(LIBSGM_INCLUDES 
+        message(STATUS "building with stereo libsgm GPU ***************")
+        set(LIBSGM_INCLUDES
         ${PROJECT_SOURCE_DIR}/Thirdparty/libsgm/include
         )
-        set(LIBSGM_LIBRARIES 
-        ${PROJECT_SOURCE_DIR}/Thirdparty/libsgm/lib/libsgm.a  # this contains CUDA 
+        set(LIBSGM_LIBRARIES
+        ${PROJECT_SOURCE_DIR}/Thirdparty/libsgm/lib/libsgm.a  # device code: CUDA or HIP
         )
     else()
         message(STATUS "stereo libsgm disabled! ***************")
@@ -481,7 +499,12 @@ ${GLFW_LIBRARIES}
 ${CHOLMOD_LIBRARIES}
 )
 if(CUDA_FOUND)
-    set(EXTERNAL_CORE_LIBS ${EXTERNAL_CORE_LIBS} ${CUDA_LIBRARIES}) # ${CUDA_LIBRARIES} are used just for stereo disparity computation when libelas or libsgm support are added 
+    set(EXTERNAL_CORE_LIBS ${EXTERNAL_CORE_LIBS} ${CUDA_LIBRARIES}) # ${CUDA_LIBRARIES} are used just for stereo disparity computation when libelas or libsgm support are added
+endif()
+if(USE_HIP)
+    # libsgm.a / liblibelas_gpu.a carry HIP device code; link the HIP runtime
+    find_library(HIP_RUNTIME_LIB amdhip64 HINTS /opt/rocm/lib /opt/rocm/lib64)
+    set(EXTERNAL_CORE_LIBS ${EXTERNAL_CORE_LIBS} ${HIP_RUNTIME_LIB})
 endif()
 if(WITH_RERUN)
     set(EXTERNAL_CORE_LIBS ${EXTERNAL_CORE_LIBS} rerun_sdk)

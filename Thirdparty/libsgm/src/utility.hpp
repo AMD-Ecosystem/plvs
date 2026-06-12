@@ -25,16 +25,16 @@ limitations under the License.
 
 namespace sgm {
 
-// Warp size: 64 on CDNA (wave64), 32 on RDNA and NVIDIA
-#if defined(__HIP_PLATFORM_AMD__)
-  #if defined(__GFX9__)
-    static constexpr unsigned int WARP_SIZE = 64u;   // CDNA: gfx90a, gfx94x
-  #else
-    static constexpr unsigned int WARP_SIZE = 32u;   // RDNA: gfx10xx, gfx11xx
-  #endif
-#else
-  static constexpr unsigned int WARP_SIZE = 32u;     // CUDA
-#endif
+// SGM partitions a wavefront into one logical warp per image row / DP block and
+// drives all path-aggregation and winner-takes-all shuffles at this width. The
+// algorithm is built around a 32-lane warp (REDUCTION_PER_THREAD = MAX_DISPARITY /
+// WARP_SIZE, subgroup_merge_top2<WARP_SIZE>, warp_id = threadIdx.x / WARP_SIZE).
+// On CDNA wave64 the physical wavefront is 64 lanes; setting WARP_SIZE = 64 makes
+// the shuffle reductions cross the intended 32-lane partition and produces wrong
+// disparities (verified empirically). Keep WARP_SIZE at the logical 32 on every
+// target so each logical warp is a 32-lane subgroup of the wavefront; width-32
+// shuffles stay inside that subgroup and are wave64-correct.
+static constexpr unsigned int WARP_SIZE = 32u;
 
 namespace detail {
 	template <typename T, unsigned int GROUP_SIZE, unsigned int STEP>
