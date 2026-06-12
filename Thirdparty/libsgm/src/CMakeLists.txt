@@ -9,7 +9,11 @@ file(GLOB STEREOSRCS "*.cu" "*.cpp")
 if(USE_HIP)
     # HIP build
     set_source_files_properties(${STEREOSRCS} PROPERTIES LANGUAGE HIP)
-    set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD} -O3 -fPIC")
+    if(WIN32)
+      set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD} -O3")
+    else()
+      set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD} -O3 -fPIC")
+    endif()
 
     if(LIBSGM_SHARED)
         add_library(sgm SHARED stereo_sgm.cpp ${STEREOSRCS})
