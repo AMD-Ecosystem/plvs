@@ -43,8 +43,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #====================================
 # compiler and build options 
 
-set(LIBRARY_TYPE SHARED)
-#set(LIBRARY_TYPE STATIC)  
+if(WIN32)
+    # A shared plvs would need every templated PointCloud* class member explicitly
+    # exported (__declspec(dllexport)); the project has no such annotations, so on
+    # Windows build the core as a static library and let each executable pull the
+    # template instantiations it needs.
+    set(LIBRARY_TYPE STATIC)
+else()
+    set(LIBRARY_TYPE SHARED)
+endif()
+#set(LIBRARY_TYPE STATIC)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -61,8 +69,13 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
 
-    # Best release
-    set(MY_FLAGS "-Wall -O3 -fPIC -DNDEBUG -Wno-unused-parameter -Wno-unused-function") # -Wextra -Wno-deprecated
+    # Best release. clang for x86_64-pc-windows-msvc rejects -fPIC (implicit on
+    # Windows); keep it on the other platforms.
+    if(WIN32)
+        set(MY_FLAGS "-Wall -O3 -DNDEBUG -Wno-unused-parameter -Wno-unused-function")
+    else()
+        set(MY_FLAGS "-Wall -O3 -fPIC -DNDEBUG -Wno-unused-parameter -Wno-unused-function") # -Wextra -Wno-deprecated
+    endif()
 
     if(BUILD_WITH_MARCH_NATIVE)
         set(MY_FLAGS "${MY_FLAGS} -march=native")      
@@ -84,7 +97,11 @@ else()
     #set(MY_FLAGS "-Wall -O3  -g -pthread")
 
     # Debug with g2o compiled with -march=native; this should avoid g2o crashes (see "Mismatched build flags" on https://github.com/ethz-asl/eigen_catkin/wiki/Eigen-Memory-Issues#memory-misalignment )
-    set(MY_FLAGS "-Wall  -g -O3 -fPIC -pthread") # -fsanitize=address  
+    if(WIN32)
+        set(MY_FLAGS "-Wall  -g -O3")  # clang rejects -fPIC/-pthread for windows-msvc
+    else()
+        set(MY_FLAGS "-Wall  -g -O3 -fPIC -pthread") # -fsanitize=address
+    endif()
 
     if(BUILD_WITH_MARCH_NATIVE)
         set(MY_FLAGS "${MY_FLAGS} -march=native")      
@@ -103,9 +120,16 @@ endif()
 set(MY_C_FLAGS "${CMAKE_C_FLAGS} ${MY_FLAGS}")
 set(MY_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MY_FLAGS}")    
 
-# apply flags 
+# apply flags
 set(CMAKE_C_FLAGS "${MY_C_FLAGS}")
 set(CMAKE_CXX_FLAGS "${MY_CXX_FLAGS}")
+
+if(WIN32)
+    # NOMINMAX: keep windows.h from defining min/max macros (they clash with STL
+    # and PCL/Eigen). WIN32_LEAN_AND_MEAN: avoid windows.h pulling the legacy
+    # winsock1 headers, which conflict with <winsock2.h>. _USE_MATH_DEFINES: M_PI.
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
+endif()
 
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
 
@@ -245,6 +269,12 @@ endif()
 
 find_package(Eigen3 3.1.0 REQUIRED)
 message(STATUS "eigen include: ${EIGEN3_INCLUDE_DIR}")
+# The local FindEigen3 module only sets EIGEN3_INCLUDE_DIR; some dependency config
+# packages (e.g. Pangolin) additionally require the Eigen3::Eigen imported target
+# from Eigen's own config package, so pull it in when available.
+if(NOT TARGET Eigen3::Eigen)
+    find_package(Eigen3 CONFIG QUIET)
+endif()
 
 
 find_package(Boost REQUIRED COMPONENTS thread system serialization)
@@ -279,7 +309,12 @@ message(STATUS "opencv lib dirs: ${OpenCV_INSTALL_PATH}")
 message(STATUS "opencv libs: ${OpenCV_LIBS}")
 
 
-set(Pangolin_DIR ${PROJECT_SOURCE_DIR}/Thirdparty/Pangolin/build/) # this seems to work in general 
+# On Linux the project builds Pangolin in-tree (Thirdparty/Pangolin/build). On
+# Windows, take Pangolin from a CMake config package (e.g. vcpkg) via the normal
+# find_package search unless the caller pins Pangolin_DIR explicitly.
+if(NOT WIN32)
+    set(Pangolin_DIR ${PROJECT_SOURCE_DIR}/Thirdparty/Pangolin/build/) # this seems to work in general
+endif()
 #set(CMAKE_PREFIX_PATH ${PROJECT_SOURCE_DIR}/Thirdparty/Pangolin/install/lib/cmake/Pangolin/) # this does not work (after make install) if we set the RPATH!
 #set(Pangolin_DIR ${PROJECT_SOURCE_DIR}/Thirdparty/Pangolin/install/) # this does not work (after make install) if we set the RPATH!
 message(STATUS "set custom pangolin folder: ${Pangolin_DIR}")
@@ -335,8 +370,16 @@ message(STATUS "protobuf libs: ${PROTOBUF_LIBRARIES}")
 find_package(LibCrypto REQUIRED)
 
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GLFW REQUIRED glfw3)
+if(WIN32)
+    # pkg-config is not the norm on Windows; use GLFW's CMake config package
+    # (e.g. from vcpkg), which exposes the glfw target and its include dirs.
+    find_package(glfw3 CONFIG REQUIRED)
+    set(GLFW_LIBRARIES glfw)
+    set(GLFW_INCLUDE_DIRS "")
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GLFW REQUIRED glfw3)
+endif()
 
 
 if(BUILD_FASTFUSION)
@@ -366,9 +409,11 @@ if(WITH_LIBELAS)
     set(LIBELAS_INCLUDES 
     ${PROJECT_SOURCE_DIR}/Thirdparty/libelas-gpu/include
     )
-    set(LIBELAS_LIBRARIES 
-    ${PROJECT_SOURCE_DIR}/Thirdparty/libelas-gpu/lib/liblibelas_gpu.a  # this contains or not CUDA 
-    )
+    if(WIN32)
+        set(LIBELAS_LIBRARIES ${PROJECT_SOURCE_DIR}/Thirdparty/libelas-gpu/lib/libelas_gpu.lib)
+    else()
+        set(LIBELAS_LIBRARIES ${PROJECT_SOURCE_DIR}/Thirdparty/libelas-gpu/lib/liblibelas_gpu.a)  # this contains or not CUDA
+    endif()
 else()
     message(STATUS "libelas disabled! ***************")
 endif()
@@ -385,9 +430,11 @@ if(WITH_LIBSGM)
         set(LIBSGM_INCLUDES
         ${PROJECT_SOURCE_DIR}/Thirdparty/libsgm/include
         )
-        set(LIBSGM_LIBRARIES
-        ${PROJECT_SOURCE_DIR}/Thirdparty/libsgm/lib/libsgm.a  # device code: CUDA or HIP
-        )
+        if(WIN32)
+            set(LIBSGM_LIBRARIES ${PROJECT_SOURCE_DIR}/Thirdparty/libsgm/lib/sgm.lib)  # device code: HIP
+        else()
+            set(LIBSGM_LIBRARIES ${PROJECT_SOURCE_DIR}/Thirdparty/libsgm/lib/libsgm.a)  # device code: CUDA or HIP
+        endif()
     else()
         message(STATUS "stereo libsgm disabled! ***************")
     endif()
@@ -419,7 +466,12 @@ if( WITH_G2O_NEW )
 else()
     # g2o provided with ORBSLAM3
     set(G2O_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/)
-    set(G2O_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so)
+    if(WIN32)
+        # g2o places its DLL + import lib in bin/ on Windows (see its CMakeLists)
+        set(G2O_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/bin/g2o.lib)
+    else()
+        set(G2O_LIBS ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so)
+    endif()
 endif()
 message(STATUS "g2o include: ${G2O_INCLUDE_DIR}")
 message(STATUS "g2o lib dirs: ${G2O_LIB_DIR}")
@@ -483,10 +535,18 @@ endif()
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
 
-set(EXTERNAL_CORE_LIBS   # core external libs 
+# On Windows, Boost libraries are versioned (e.g. boost_serialization-vc143-mt-...
+# .lib), so the bare boost_serialization / boost_thread names do not resolve; rely
+# on the targets find_package(Boost) populated in Boost_LIBRARIES instead.
+if(WIN32)
+    set(BOOST_EXTRA_LIBS Boost::serialization Boost::thread)
+else()
+    set(BOOST_EXTRA_LIBS boost_serialization boost_thread)
+endif()
+set(EXTERNAL_CORE_LIBS   # core external libs
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
-${Boost_LIBRARIES} boost_serialization boost_thread # FIXME: remove this and let cmake package finder get the info!
+${Boost_LIBRARIES} ${BOOST_EXTRA_LIBS}
 #Boost::boost # NOTE this does not work!
 ${Pangolin_LIBRARIES}
 ${G2O_LIBS}
@@ -518,7 +578,27 @@ if(realsense2_FOUND)
 endif()
 
 
-set(EXTERNAL_LIBS  # Thirdparty libs 
+# The bundled Thirdparty libraries are referenced by output-file path. On Windows
+# the all-clang toolchain emits MSVC-style names (an import .lib for each SHARED
+# DLL, a .lib for each static archive) instead of lib*.so / lib*.a; select the
+# right names per platform.
+set(TP ${PROJECT_SOURCE_DIR}/Thirdparty)
+if(WIN32)
+    set(EXTERNAL_LIBS  # Thirdparty libs
+    ${TP}/DBoW2/lib/DBoW2.lib
+    ${TP}/line_descriptor/lib/linedesc.lib
+    ${TP}/volumetric_mapping/lib/volumetric_mapping.lib
+    ${TP}/chisel_server/lib/chisel_server.lib
+    ${TP}/open_chisel/lib/open_chisel.lib
+    ${FASTFUSION_LIBRARIES}
+    ${TP}/voxblox/lib/voxblox.lib
+    ${TP}/voxblox/lib/voxblox_proto.lib
+    ${TP}/voxblox_server/lib/voxblox_server.lib
+    ${LIBELAS_LIBRARIES}
+    ${LIBSGM_LIBRARIES}
+    )
+else()
+set(EXTERNAL_LIBS  # Thirdparty libs
 ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/Thirdparty/line_descriptor/lib/liblinedesc.a
 ${PROJECT_SOURCE_DIR}/Thirdparty/volumetric_mapping/lib/libvolumetric_mapping.so
@@ -531,8 +611,9 @@ ${PROJECT_SOURCE_DIR}/Thirdparty/voxblox_server/lib/libvoxblox_server.a
 ${LIBELAS_LIBRARIES}
 ${LIBSGM_LIBRARIES}
 )
+endif()
 
-link_directories( 
+link_directories(
   ${G2O_LIB_DIR}  
   ${PCL_LIBRARY_DIRS}
 )
@@ -541,7 +622,8 @@ link_directories(
 # source files and folders to build 
 
 #add_library(${PROJECT_NAME} SHARED
-set(CPU_SOURCES 
+set(CPU_SOURCES
+src/WinBoostArchiveCompat.cpp
 src/System.cc
 src/Tracking.cc
 src/LocalMapping.cc

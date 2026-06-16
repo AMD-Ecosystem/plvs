@@ -30,6 +30,13 @@
 #define pcl_isfinite(x) std::isfinite(x)
 #endif
 
+// PCL 1.13+ moved the voxel-grid helper struct into pcl::internal; alias it so
+// the body below (copied from PCL's own VoxelGrid) compiles across versions.
+#include <pcl/pcl_config.h>
+#if PCL_VERSION_COMPARE(>=, 1, 13, 0)
+using pcl::internal::cloud_point_index_idx;
+#endif
+
 
 inline void pcl::VoxelGridCustom<pcl::PointSurfelSegment>::applyFilter (PointCloud &output)
 {
