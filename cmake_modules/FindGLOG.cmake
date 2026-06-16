@@ -40,18 +40,21 @@ if(NOT GLOG_FOUND)
      find_package(glog CONFIG QUIET)
      if(TARGET glog::glog)
           set(GLOG_LIBRARIES glog::glog)
-          # The vcpkg static glog (e.g. x64-windows-static-md) is built against
-          # Abseil for its logging core but its CMake config does not export that
-          # as an interface dependency, so consumers see unresolved
-          # absl::log_internal / absl::Cord symbols. Pull Abseil and add the log
-          # and cord targets (which transitively drag in the rest) when present.
-          # No-op where glog does not use Abseil (e.g. the Linux system glog).
-          find_package(absl CONFIG QUIET)
-          foreach(_absl_tgt absl::log absl::log_internal_check_op absl::cord)
-               if(TARGET ${_absl_tgt})
-                    list(APPEND GLOG_LIBRARIES ${_absl_tgt})
-               endif()
-          endforeach()
+          # The vcpkg static glog (x64-windows-static-md) is built against Abseil
+          # for its logging core but its CMake config does not export that as an
+          # interface dependency, so consumers see unresolved absl::log_internal /
+          # absl::Cord symbols. On Linux the system shared glog links Abseil
+          # internally; adding absl imported targets here would pull
+          # /opt/conda/include into the compile flags and break the generated
+          # voxblox .pb.h version check (conda absl is v7.35, .pb.h expects v3.21).
+          if(WIN32)
+               find_package(absl CONFIG QUIET)
+               foreach(_absl_tgt absl::log absl::log_internal_check_op absl::cord)
+                    if(TARGET ${_absl_tgt})
+                         list(APPEND GLOG_LIBRARIES ${_absl_tgt})
+                    endif()
+               endforeach()
+          endif()
           get_target_property(GLOG_INCLUDE_DIRS glog::glog INTERFACE_INCLUDE_DIRECTORIES)
           # Projects here include <glog/logging.h> via include_directories rather
           # than by linking glog::glog on every target, so propagate the imported
