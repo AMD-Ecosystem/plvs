@@ -20,17 +20,38 @@ if(NOT GLOG_FOUND)
      # packages export gflags::gflags_shared/_static instead, so alias it.
      find_package(gflags CONFIG QUIET)
      if(NOT TARGET gflags::gflags)
+          # gflags exports its target under several names depending on the build:
+          # gflags::gflags_shared/_static when GFLAGS_USE_TARGET_NAMESPACE is on,
+          # the bare gflags_shared/gflags_static when it is off (vcpkg's
+          # x64-windows-static-md default). Alias whichever exists to the name the
+          # glog config package expects.
           if(TARGET gflags::gflags_shared)
                add_library(gflags::gflags ALIAS gflags::gflags_shared)
           elseif(TARGET gflags::gflags_static)
                add_library(gflags::gflags ALIAS gflags::gflags_static)
           elseif(TARGET gflags_shared)
                add_library(gflags::gflags ALIAS gflags_shared)
+          elseif(TARGET gflags_static)
+               add_library(gflags::gflags ALIAS gflags_static)
+          elseif(TARGET gflags)
+               add_library(gflags::gflags ALIAS gflags)
           endif()
      endif()
      find_package(glog CONFIG QUIET)
      if(TARGET glog::glog)
           set(GLOG_LIBRARIES glog::glog)
+          # The vcpkg static glog (e.g. x64-windows-static-md) is built against
+          # Abseil for its logging core but its CMake config does not export that
+          # as an interface dependency, so consumers see unresolved
+          # absl::log_internal / absl::Cord symbols. Pull Abseil and add the log
+          # and cord targets (which transitively drag in the rest) when present.
+          # No-op where glog does not use Abseil (e.g. the Linux system glog).
+          find_package(absl CONFIG QUIET)
+          foreach(_absl_tgt absl::log absl::log_internal_check_op absl::cord)
+               if(TARGET ${_absl_tgt})
+                    list(APPEND GLOG_LIBRARIES ${_absl_tgt})
+               endif()
+          endforeach()
           get_target_property(GLOG_INCLUDE_DIRS glog::glog INTERFACE_INCLUDE_DIRECTORIES)
           # Projects here include <glog/logging.h> via include_directories rather
           # than by linking glog::glog on every target, so propagate the imported
