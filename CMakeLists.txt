@@ -376,7 +376,12 @@ find_package(Protobuf REQUIRED)
 # dependencies; the legacy PROTOBUF_LIBRARIES variable is just the bare library
 # path and omits them, leaving unresolved absl symbols at the final link. Prefer
 # the target when present.
-if(TARGET protobuf::libprotobuf)
+if(WIN32 AND TARGET protobuf::libprotobuf)
+    # On Windows with vcpkg static protobuf the bare PROTOBUF_LIBRARIES path
+    # omits Abseil link dependencies; use the imported target which carries them.
+    # On Linux the system shared protobuf's FindProtobuf sets PROTOBUF_LIBRARIES to
+    # the bare .so path; using the conda-found imported target would pull
+    # /opt/conda/include first and break the generated .pb.h version check.
     set(PROTOBUF_LIBRARIES protobuf::libprotobuf)
     # The static protobuf also needs utf8_range (utf8_range_IsValid / ValidPrefix),
     # which its imported target does not always carry transitively; add it.
