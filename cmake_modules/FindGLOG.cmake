@@ -11,6 +11,41 @@
 # GLOG_ROOT - Can be set to Glog install path or Windows build path
 #
 
+# Modern glog (e.g. from vcpkg) ships a CMake config package exposing the
+# glog::glog imported target; prefer it when available (covers Windows, where the
+# manual library search below assumes an MSVC layout).
+if(NOT GLOG_FOUND)
+     # glog's config package may declare a link dependency on gflags::gflags;
+     # resolve it first so the imported target loads cleanly. Some gflags
+     # packages export gflags::gflags_shared/_static instead, so alias it.
+     find_package(gflags CONFIG QUIET)
+     if(NOT TARGET gflags::gflags)
+          if(TARGET gflags::gflags_shared)
+               add_library(gflags::gflags ALIAS gflags::gflags_shared)
+          elseif(TARGET gflags::gflags_static)
+               add_library(gflags::gflags ALIAS gflags::gflags_static)
+          elseif(TARGET gflags_shared)
+               add_library(gflags::gflags ALIAS gflags_shared)
+          endif()
+     endif()
+     find_package(glog CONFIG QUIET)
+     if(TARGET glog::glog)
+          set(GLOG_LIBRARIES glog::glog)
+          get_target_property(GLOG_INCLUDE_DIRS glog::glog INTERFACE_INCLUDE_DIRECTORIES)
+          # Projects here include <glog/logging.h> via include_directories rather
+          # than by linking glog::glog on every target, so propagate the imported
+          # target's interface compile definitions (GLOG_USE_GLOG_EXPORT etc.)
+          # globally; without them the headers #error out.
+          get_target_property(_glog_defs glog::glog INTERFACE_COMPILE_DEFINITIONS)
+          if(_glog_defs)
+               add_compile_definitions(${_glog_defs})
+          endif()
+          set(GLOG_FOUND TRUE)
+          message(STATUS "glog found via CMake config package (glog::glog)")
+          return()
+     endif()
+endif()
+
 if (NOT DEFINED GLOG_ROOT)
      set (GLOG_ROOT /usr /usr/local)
 endif (NOT DEFINED GLOG_ROOT)

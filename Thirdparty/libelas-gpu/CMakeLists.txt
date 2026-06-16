@@ -44,15 +44,19 @@ set(CMAKE_CXX_STANDARD ${CPP_STANDARD_VERSION})
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Enable compile optimizations
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native ")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -pthread -ftree-vectorize -funroll-loops -fPIC")
-    # Enable SSE3 cpu commands
-    # If we are on ARM we need to find an alternative
-    #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2 -msse3")
+# clang for x86_64-pc-windows-msvc rejects -fPIC and -pthread.
+if(WIN32)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -ftree-vectorize -funroll-loops")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3 -Wall")
+    endif()
 else()
-    # Enable debug flags
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3 -Wall -fPIC")
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -pthread -ftree-vectorize -funroll-loops -fPIC")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3 -Wall -fPIC")
+    endif()
 endif()
 
 if(BUILD_WITH_MARCH_NATIVE)
@@ -135,7 +139,11 @@ set(sources_cpu
 if(USE_HIP)
     # HIP build
     set_source_files_properties(${sources_gpu} PROPERTIES LANGUAGE HIP)
-    set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD} -O3 -fPIC")
+    if(WIN32)
+        set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD} -O3")
+    else()
+        set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD} -O3 -fPIC")
+    endif()
 
     add_library(${PROJECT_NAME}
         ${sources_gpu}
