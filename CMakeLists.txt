@@ -246,7 +246,13 @@ if(USE_HIP)
     # cuda_stream_accessor.hpp) must select the HIP runtime branch and resolve
     # hip/hip_runtime.h. Define __HIP_PLATFORM_AMD__ and add the ROCm include path
     # for the host compiler so those headers do not fall back to <cuda_runtime.h>.
-    find_path(HIP_INCLUDE_DIR hip/hip_runtime.h HINTS /opt/rocm/include)
+    # Derive a ROCm include hint from the HIP compiler location (its bin dir sits
+    # under the ROCm root) so this resolves on Windows where ROCm is not at
+    # /opt/rocm; fall back to ROCM_PATH and the Linux default.
+    get_filename_component(_hip_bin "${CMAKE_HIP_COMPILER}" DIRECTORY)
+    get_filename_component(_rocm_root "${_hip_bin}/../../.." ABSOLUTE)
+    find_path(HIP_INCLUDE_DIR hip/hip_runtime.h
+        HINTS "${_rocm_root}/include" "$ENV{ROCM_PATH}/include" /opt/rocm/include)
     add_compile_definitions(__HIP_PLATFORM_AMD__)
     include_directories(${HIP_INCLUDE_DIR})
 
@@ -357,6 +363,7 @@ if(NOT GLOG_FOUND)
 endif()
 
 
+
 find_package(octomap REQUIRED)
 message(STATUS "octomap include: ${OCTOMAP_INCLUDE_DIRS}")
 message(STATUS "octomap lib dirs: ${OCTOMAP_LIBRARY_DIRS}")
@@ -364,7 +371,45 @@ message(STATUS "octomap libs: ${OCTOMAP_LIBRARIES}")
 
 
 find_package(Protobuf REQUIRED)
+# The modern protobuf (e.g. vcpkg's, where it is built static against Abseil)
+# exposes the protobuf::libprotobuf imported target carrying its Abseil link
+# dependencies; the legacy PROTOBUF_LIBRARIES variable is just the bare library
+# path and omits them, leaving unresolved absl symbols at the final link. Prefer
+# the target when present.
+if(TARGET protobuf::libprotobuf)
+    set(PROTOBUF_LIBRARIES protobuf::libprotobuf)
+    # The static protobuf also needs utf8_range (utf8_range_IsValid / ValidPrefix),
+    # which its imported target does not always carry transitively; add it.
+    find_package(utf8_range CONFIG QUIET)
+    foreach(_u utf8_range::utf8_validity utf8_range::utf8_range)
+        if(TARGET ${_u})
+            list(APPEND PROTOBUF_LIBRARIES ${_u})
+        endif()
+    endforeach()
+endif()
 message(STATUS "protobuf libs: ${PROTOBUF_LIBRARIES}")
+
+# When the dependency stack is the vcpkg static Abseil (Windows static-md),
+# protobuf and glog reference Abseil's SwissTable / hashtablez internals across
+# several archives that single-pass static linking will not resolve unless the
+# full Abseil target set is on the link line. Collect every imported absl:: target
+# (read from its exported targets file, as Abseil imports them GLOBAL) into
+# ABSEIL_LIBRARIES so the closure is complete. Empty where Abseil is absent
+# (e.g. the Linux build with a shared protobuf/glog).
+set(ABSEIL_LIBRARIES "")
+if(WIN32)
+    file(GLOB _absl_target_files "${CMAKE_PREFIX_PATH}/share/absl/abslTargets.cmake")
+    foreach(_f IN LISTS _absl_target_files)
+        file(STRINGS "${_f}" _lines REGEX "add_library\\(absl::")
+        foreach(_l IN LISTS _lines)
+            string(REGEX MATCH "absl::[A-Za-z0-9_]+" _n "${_l}")
+            if(_n AND TARGET ${_n})
+                list(APPEND ABSEIL_LIBRARIES ${_n})
+            endif()
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES ABSEIL_LIBRARIES)
+endif()
 
 
 find_package(LibCrypto REQUIRED)
@@ -554,6 +599,7 @@ ${PCL_LIBRARIES}
 ${GLOG_LIBRARIES}
 ${OCTOMAP_LIBRARIES}
 ${PROTOBUF_LIBRARIES}
+${ABSEIL_LIBRARIES}
 ${LibCrypto_LIBRARY}
 ${GLFW_LIBRARIES}
 ${CHOLMOD_LIBRARIES}
@@ -562,8 +608,13 @@ if(CUDA_FOUND)
     set(EXTERNAL_CORE_LIBS ${EXTERNAL_CORE_LIBS} ${CUDA_LIBRARIES}) # ${CUDA_LIBRARIES} are used just for stereo disparity computation when libelas or libsgm support are added
 endif()
 if(USE_HIP)
-    # libsgm.a / liblibelas_gpu.a carry HIP device code; link the HIP runtime
-    find_library(HIP_RUNTIME_LIB amdhip64 HINTS /opt/rocm/lib /opt/rocm/lib64)
+    # libsgm.a / liblibelas_gpu.a carry HIP device code; link the HIP runtime.
+    # The runtime import lib lives under the ROCm root (derived from the HIP
+    # compiler) on Windows, or /opt/rocm/lib(64) on Linux.
+    get_filename_component(_hip_bin "${CMAKE_HIP_COMPILER}" DIRECTORY)
+    get_filename_component(_rocm_root "${_hip_bin}/../../.." ABSOLUTE)
+    find_library(HIP_RUNTIME_LIB amdhip64
+        HINTS "${_rocm_root}/lib" "$ENV{ROCM_PATH}/lib" /opt/rocm/lib /opt/rocm/lib64)
     set(EXTERNAL_CORE_LIBS ${EXTERNAL_CORE_LIBS} ${HIP_RUNTIME_LIB})
 endif()
 if(WITH_RERUN)
@@ -736,6 +787,45 @@ src/g2o/types_seven_dof_expmap2.cpp
 
 if (WITH_CUDA)
     cuda_compile(CUDA_OBJS ${CUDA_SOURCES})
+endif()
+
+if(WIN32)
+    # Abseil's exported targets (pulled in transitively by PCL/protobuf and the
+    # vcpkg static glog) carry the bare MSVC lib flag "-ignore:4221" wrapped in a
+    # $<LINK_ONLY:...> generator expression in their INTERFACE_LINK_LIBRARIES. The
+    # vcpkg toolchain forwards it to the linker, but the all-clang driver used here
+    # treats it as an unknown argument and fails the final link. Strip it from
+    # every imported Abseil target (it only suppresses a benign "no public symbols"
+    # archive warning). Done here, after all find_package calls, so nothing
+    # re-imports Abseil and restores the flag. The target names are read from the
+    # exported targets file because Abseil imports them GLOBAL (not enumerable via a
+    # directory's IMPORTED_TARGETS).
+    file(GLOB _absl_target_files "${CMAKE_PREFIX_PATH}/share/absl/abslTargets.cmake")
+    set(_absl_names "")
+    foreach(_f IN LISTS _absl_target_files)
+        file(STRINGS "${_f}" _lines REGEX "add_library\\(absl::")
+        foreach(_l IN LISTS _lines)
+            string(REGEX MATCH "absl::[A-Za-z0-9_]+" _n "${_l}")
+            if(_n)
+                list(APPEND _absl_names "${_n}")
+            endif()
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES _absl_names)
+    foreach(_t IN LISTS _absl_names)
+        if(TARGET ${_t})
+            get_target_property(_ill ${_t} INTERFACE_LINK_LIBRARIES)
+            if(_ill)
+                set(_clean "")
+                foreach(_item IN LISTS _ill)
+                    if(NOT _item MATCHES "ignore:4221")
+                        list(APPEND _clean "${_item}")
+                    endif()
+                endforeach()
+                set_target_properties(${_t} PROPERTIES INTERFACE_LINK_LIBRARIES "${_clean}")
+            endif()
+        endif()
+    endforeach()
 endif()
 
 if(USE_HIP)
