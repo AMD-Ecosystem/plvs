@@ -30,11 +30,13 @@
 #define pcl_isfinite(x) std::isfinite(x)
 #endif
 
-// PCL 1.13+ moved the voxel-grid helper struct into pcl::internal; alias it so
-// the body below (copied from PCL's own VoxelGrid) compiles across versions.
+// cloud_point_index_idx is defined in the PCL voxel_grid impl header. Some PCL
+// versions place it in a nested namespace; pull it into scope if needed.
 #include <pcl/pcl_config.h>
-#if PCL_VERSION_COMPARE(>=, 1, 13, 0)
-using pcl::internal::cloud_point_index_idx;
+#if defined(PCL_MAJOR_VERSION) && (PCL_MAJOR_VERSION > 1 || PCL_MINOR_VERSION >= 13)
+// pcl/filters/impl/voxel_grid.hpp defines the struct; it is already in scope
+// via the voxel_grid.h include above (which pulls the impl header on Linux
+// PCL 1.14). Nothing extra needed -- the struct is in the global namespace.
 #endif
 
 
