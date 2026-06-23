@@ -220,12 +220,9 @@ message(STATUS "USE_HIP: " ${USE_HIP})
 
 if(USE_HIP)
     cmake_minimum_required(VERSION 3.21)
+    # enable_language(HIP) honors an explicit -DCMAKE_HIP_ARCHITECTURES, otherwise
+    # auto-detects the host GPU(s), and errors on a no-GPU build host.
     enable_language(HIP)
-
-    # Default arch when unset (gfx90a for CDNA2); configure with -DCMAKE_HIP_ARCHITECTURES=<arch>
-    if(NOT DEFINED CMAKE_HIP_ARCHITECTURES OR CMAKE_HIP_ARCHITECTURES STREQUAL "")
-        set(CMAKE_HIP_ARCHITECTURES "gfx90a")
-    endif()
     message(STATUS "CMAKE_HIP_ARCHITECTURES: ${CMAKE_HIP_ARCHITECTURES}")
 
     # Set files to build
