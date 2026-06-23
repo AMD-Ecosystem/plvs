@@ -17,10 +17,9 @@ MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 # Include libraries
 if(USE_HIP)
     cmake_minimum_required(VERSION 3.21)
+    # enable_language(HIP) honors an explicit -DCMAKE_HIP_ARCHITECTURES, otherwise
+    # auto-detects the host GPU(s), and errors on a no-GPU build host.
     enable_language(HIP)
-    if(NOT DEFINED CMAKE_HIP_ARCHITECTURES OR CMAKE_HIP_ARCHITECTURES STREQUAL "")
-        set(CMAKE_HIP_ARCHITECTURES "gfx90a")
-    endif()
     message(STATUS "libelas-gpu: CMAKE_HIP_ARCHITECTURES: ${CMAKE_HIP_ARCHITECTURES}")
     add_compile_definitions(USE_HIP)
     set(USE_GPU true)
