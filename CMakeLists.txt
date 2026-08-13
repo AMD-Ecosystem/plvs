@@ -239,6 +239,14 @@ if(USE_HIP)
     # Add USE_HIP define and include the compat header path
     add_compile_definitions(USE_HIP)
 
+    # The device sources include <cuda/helper_cuda.h> for checkCudaErrors, which
+    # the vendored CUDA samples header only defines when the CUDA toolkit has
+    # already defined __DRIVER_TYPES_H__, so it is unavailable here. hip_compat/
+    # holds substitutes named after the headers they stand in for; prepending it
+    # makes those includes resolve here on a ROCm build, while the vendored
+    # copies stay untouched and keep serving the CUDA build.
+    include_directories(BEFORE ${PROJECT_SOURCE_DIR}/hip_compat)
+
     # Host C++ translation units that include OpenCV's cv::cuda headers (e.g.
     # cuda_stream_accessor.hpp) must select the HIP runtime branch and resolve
     # hip/hip_runtime.h. Define __HIP_PLATFORM_AMD__ and add the ROCm include path
