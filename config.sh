@@ -76,11 +76,16 @@ export CUDADIR=/usr/local/$CUDA_VERSION
 
 # N.B: HIP is the AMD GPU alternative to CUDA above (same GPU code paths, built for
 # AMD GPUs): enable either USE_CUDA or USE_HIP, not both. You also need an OpenCV
-# installation built with HIP support.
+# installation built with HIP support: set USE_LOCAL_OPENCV=0 above and point
+# OpenCV_DIR to an OpenCV configured with -DWITH_HIP=ON (the local OpenCV built by
+# install_local_opencv.sh has no HIP support).
 
 # 1: ON, 0: OFF
 export USE_HIP=0  # use HIP in PLVS sparse SLAM on AMD GPUs
-export ROCM_PATH="${ROCM_PATH:-/opt/rocm}"  # must be an installed ROCm path
+
+# ROCM_PATH is detected below from the hipcc found in the PATH. Set it here only if
+# you have multiple ROCm installations and want to select one of them.
+# export ROCM_PATH="/opt/rocm"
 
 # ====================================================
 # PCL
@@ -145,8 +150,30 @@ fi
 # ====================================================
 # HIP
 
+# HIP and CUDA build the same GPU code paths: keep at most one of them enabled
+if [ $USE_CUDA -eq 1 ] && [ $USE_HIP -eq 1 ]; then
+	USE_HIP=0
+	echo 'USE_CUDA and USE_HIP cannot be both enabled: HIP env var reset'
+fi
+
+# find the ROCm installation: an explicit ROCM_PATH wins, then the hipcc found in the
+# PATH (where a pip-installed ROCm SDK lives), then the standard /opt/rocm path.
+# N.B: ROCM_PATH must be exported only when it points to an actual installation:
+# hipconfig honors it, and cmake runs hipconfig to find the HIP toolchain, so a
+# ROCM_PATH pointing to a missing directory makes enable_language(HIP) fail.
 export HIP_FOUND=0
-if [ -f $ROCM_PATH/bin/hipcc ] || [ -x "$(command -v hipcc)" ]; then
+if [[ -n "$ROCM_PATH" ]] && [ -f "$ROCM_PATH/bin/hipcc" ]; then
+	HIP_FOUND=1
+elif [ -x "$(command -v hipcc)" ]; then
+	ROCM_PATH_FOUND=$( (unset ROCM_PATH; hipconfig --rocmpath) 2>/dev/null )
+	if [[ ! -n "$ROCM_PATH_FOUND" ]]; then
+		ROCM_PATH_FOUND=$(dirname $(dirname $(readlink -f "$(command -v hipcc)")))
+	fi
+	export ROCM_PATH="$ROCM_PATH_FOUND"
+	unset ROCM_PATH_FOUND
+	HIP_FOUND=1
+elif [ -f /opt/rocm/bin/hipcc ]; then
+	export ROCM_PATH=/opt/rocm
 	HIP_FOUND=1
 fi
 
@@ -154,6 +181,9 @@ fi
 if [ $USE_HIP -eq 1 ]; then
 	if [ $HIP_FOUND -eq 1 ]; then
 		echo "HIP found: $ROCM_PATH"
+		if [ $USE_LOCAL_OPENCV -eq 1 ] && [[ ! -n "$OpenCV_DIR" ]]; then
+			echo 'WARNING: the local OpenCV is built without HIP support: set USE_LOCAL_OPENCV=0 and OpenCV_DIR to an OpenCV built with -DWITH_HIP=ON'
+		fi
 	else
 		USE_HIP=0
 		echo 'HIP env var reset, check your ROCm installation'
