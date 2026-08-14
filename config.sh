@@ -71,6 +71,18 @@ export LD_LIBRARY_PATH=/usr/local/$CUDA_VERSION/lib64${LD_LIBRARY_PATH:+:${LD_LI
 export CUDADIR=/usr/local/$CUDA_VERSION
 
 # ====================================================
+# HIP/ROCm Settings
+# ====================================================
+
+# N.B: HIP is the AMD GPU alternative to CUDA above (same GPU code paths, built for
+# AMD GPUs): enable either USE_CUDA or USE_HIP, not both. You also need an OpenCV
+# installation built with HIP support.
+
+# 1: ON, 0: OFF
+export USE_HIP=0  # use HIP in PLVS sparse SLAM on AMD GPUs
+export ROCM_PATH="${ROCM_PATH:-/opt/rocm}"  # must be an installed ROCm path
+
+# ====================================================
 # PCL
 # ====================================================
 
@@ -128,6 +140,24 @@ fi
 if [ $CUDA_FOUND -eq 0 ]; then
 	USE_CUDA=0
 	echo 'CUDA env var reset, check your CUDA installation'
+fi
+
+# ====================================================
+# HIP
+
+export HIP_FOUND=0
+if [ -f $ROCM_PATH/bin/hipcc ] || [ -x "$(command -v hipcc)" ]; then
+	HIP_FOUND=1
+fi
+
+# reset env var if ROCm is not installed (only reported when HIP was requested)
+if [ $USE_HIP -eq 1 ]; then
+	if [ $HIP_FOUND -eq 1 ]; then
+		echo "HIP found: $ROCM_PATH"
+	else
+		USE_HIP=0
+		echo 'HIP env var reset, check your ROCm installation'
+	fi
 fi
 
 # ====================================================
