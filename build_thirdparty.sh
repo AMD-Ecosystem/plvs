@@ -252,7 +252,7 @@ cd $SCRIPT_DIR
 
 print_blue '================================================'
 
-if [ $CUDA_FOUND -eq 1 ]; then
+if [ $CUDA_FOUND -eq 1 ] || [ $USE_HIP -eq 1 ]; then
     echo "Configuring and building Thirdparty/stereo_libsgm... "
     
     cd Thirdparty/libsgm
