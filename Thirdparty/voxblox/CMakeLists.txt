@@ -231,6 +231,12 @@ if(WIN32)
         file(GLOB _vb_entries ${_vb_dir}/*)
         file(COPY ${_vb_entries} DESTINATION ${PROJECT_SOURCE_DIR}/include)
     endforeach()
+    # Like create_include.sh, also copy the generated protobuf headers; they exist
+    # once a first build has run, which is why build_thirdparty.sh reconfigures.
+    file(GLOB _vb_pb_headers ${CMAKE_CURRENT_BINARY_DIR}/*.pb.h)
+    if(_vb_pb_headers)
+        file(COPY ${_vb_pb_headers} DESTINATION ${PROJECT_SOURCE_DIR}/include)
+    endif()
 else()
     set(MY_COMMAND sh)
     set(MY_ARG ${CMAKE_CURRENT_SOURCE_DIR}/create_include.sh ${VOXBLOX_INCLUDE_DIRS})

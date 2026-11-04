@@ -133,6 +133,12 @@ set(sources_cpu
   GPU/ElasInterface.cpp
 )
 
+# On Windows the x86 greedy register allocator of the ROCm clang (23) hangs or
+# crashes on Elas::gapInterpolation; use the basic allocator for this file.
+if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set_source_files_properties(CPU/elas.cpp PROPERTIES COMPILE_OPTIONS "-mllvm;-regalloc=basic")
+endif()
+
 
 
 if(USE_HIP)

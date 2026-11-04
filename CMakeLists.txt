@@ -405,9 +405,11 @@ message(STATUS "protobuf libs: ${PROTOBUF_LIBRARIES}")
 # full Abseil target set is on the link line. Collect every imported absl:: target
 # (read from its exported targets file, as Abseil imports them GLOBAL) into
 # ABSEIL_LIBRARIES so the closure is complete. Empty where Abseil is absent
-# (e.g. the Linux build with a shared protobuf/glog).
+# (e.g. the Linux build with a shared protobuf/glog), and also with a DLL Abseil
+# (absl::abseil_dll), whose import library already resolves every symbol and
+# whose test-only targets name libraries that are not installed.
 set(ABSEIL_LIBRARIES "")
-if(WIN32)
+if(WIN32 AND NOT TARGET absl::abseil_dll)
     file(GLOB _absl_target_files "${CMAKE_PREFIX_PATH}/share/absl/abslTargets.cmake")
     foreach(_f IN LISTS _absl_target_files)
         file(STRINGS "${_f}" _lines REGEX "add_library\\(absl::")
