@@ -129,6 +129,10 @@ if(WIN32)
     # and PCL/Eigen). WIN32_LEAN_AND_MEAN: avoid windows.h pulling the legacy
     # winsock1 headers, which conflict with <winsock2.h>. _USE_MATH_DEFINES: M_PI.
     add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
+    # Tracking keeps whole Frame objects (~420 KB each) on the stack, and the
+    # monocular initialization path nests three such frames, which overflows the
+    # 1 MB Windows default stack. Reserve the 8 MB that Linux threads get.
+    add_link_options(LINKER:/STACK:8388608)
 endif()
 
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
