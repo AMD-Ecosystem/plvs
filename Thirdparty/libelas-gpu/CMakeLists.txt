@@ -143,7 +143,11 @@ endif()
 
 if(USE_HIP)
     # HIP build
-    set_source_files_properties(${sources_gpu} PROPERTIES LANGUAGE HIP)
+    set(sources_gpu
+      GPU/elas_gpu.cu
+    )
+    # ElasInterface.cpp includes elas_gpu.h, which needs the HIP headers.
+    set_source_files_properties(${sources_gpu} GPU/ElasInterface.cpp PROPERTIES LANGUAGE HIP)
     if(WIN32)
         set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++${CMAKE_CXX_STANDARD} -O3")
     else()
