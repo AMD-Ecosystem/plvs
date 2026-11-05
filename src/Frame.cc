@@ -2978,6 +2978,10 @@ void Frame::ComputeStereoFishEyeMatches()
     //vector<cv::KeyPoint> stereoLeft(mvKeys.begin() + monoLeft, mvKeys.end());
     //vector<cv::KeyPoint> stereoRight(mvKeysRight.begin() + monoRight, mvKeysRight.end());
 
+    // Indexed by keypoint index over both images (N = Nleft + Nright); only left keypoints get a depth.
+    mvDepth = vector<float>(N,-1.0f);
+    mvuRight = vector<float>(N,-1);
+
     if(mDescriptors.rows == 0 || mDescriptorsRight.rows == 0)
     {
         MSG_WARN_STREAM("No keypoints detected in frame " << mnId);
@@ -2989,8 +2993,6 @@ void Frame::ComputeStereoFishEyeMatches()
 
     mvLeftToRightMatch = vector<int>(Nleft,-1);
     mvRightToLeftMatch = vector<int>(Nright,-1);
-    mvDepth = vector<float>(Nleft,-1.0f);
-    mvuRight = vector<float>(Nleft,-1);
     mvStereo3Dpoints = vector<Eigen::Vector3f>(Nleft);
     mnCloseMPs = 0;
 
