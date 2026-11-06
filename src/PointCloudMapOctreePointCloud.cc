@@ -955,7 +955,7 @@ int PointCloudMapOctreePointCloud<PointT>::UpdateMapNoSegm()
     //const int threshold = this->nPointCounterThreshold_ - 1;
     const unsigned int threshold = std::max(this->pPointCloudMapParameters_->nPointCounterThreshold - 1, 0);    
 
-    // Deleting a voxel frees its leaf, which the iterator still references; delete after the loop.
+    // deleteVoxelAtPoint() can free a leaf or branch the iterator has not visited yet (a centroid can lie in a neighbouring voxel); delete after the loop.
     typename OctreeType::AlignedPointTVector pointsToDelete;
 
     typename OctreeType::LeafNodeIterator it, itEnd;
@@ -1039,7 +1039,7 @@ int PointCloudMapOctreePointCloud<PointT>::UpdateMapSegm()
     //mapLabelsCardinality.clear();
 #endif
 
-    // Deleting a voxel frees its leaf, which the iterator still references; delete after the loop.
+    // deleteVoxelAtPoint() can free a leaf or branch the iterator has not visited yet (a centroid can lie in a neighbouring voxel); delete after the loop.
     typename OctreeType::AlignedPointTVector pointsToDelete;
 
     typename OctreeType::LeafNodeIterator it, itEnd;
