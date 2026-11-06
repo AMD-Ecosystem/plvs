@@ -678,7 +678,7 @@ void MapLine::UpdateNormalAndDepth()
 
     //const int level = pRefKF->mvKeyLinesUn[observations[pRefKF]].octave;
     const float levelScaleFactor =  pRefKF->mvLineScaleFactors[level];
-    const int nLevels = pRefKF->mnScaleLevels;
+    const int nLevels = pRefKF->mnLineScaleLevels;
 
     {
         unique_lock<mutex> lock3(mMutexPos);
