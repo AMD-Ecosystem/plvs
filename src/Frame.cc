@@ -3032,16 +3032,18 @@ void Frame::ComputeStereoFishEyeLineMatches()
     MSG_ASSERT(mpCamera2, "No second camera");
     MSG_ASSERT(NlinesLeft==mLineDescriptors.rows && NlinesRight==mLineDescriptorsRight.rows, "Line descriptors must be concatenated in Frame::ComputeStereoFishEyeLineMatches()");
 
+    // Indexed by line index over both images (Nlines = NlinesLeft + NlinesRight); only left lines get a depth.
+    mvDepthLineStart = vector<float>(Nlines,-1.0f);
+    mvDepthLineEnd = vector<float>(Nlines,-1.0f);
+
+    // NOTE: We store in mvuRightLineStart/End fake positive values (+1) where depths are available (for both left and right lines). 
+    //       We need to enable stereo backprojection error in Optimization.cc when we have fisheye cameras. We can't really use this info though. 
+    mvuRightLineStart = vector<float>(Nlines,-1); // Nlines = NlinesLeft + NlinesRight
+    mvuRightLineEnd = vector<float>(Nlines,-1);   // Nlines = NlinesLeft + NlinesRight
+
     if(NlinesLeft>0)
     {
-        mvDepthLineStart = vector<float>(NlinesLeft,-1.0f);
-        mvDepthLineEnd = vector<float>(NlinesLeft,-1.0f);    
         mvLeftToRightLinesMatch = vector<int>(NlinesLeft,-1);
-
-        // NOTE: We store in mvuRightLineStart/End fake positive values (+1) where depths are available (for both left and right lines). 
-        //       We need to enable stereo backprojection error in Optimization.cc when we have fisheye cameras. We can't really use this info though. 
-        mvuRightLineStart = vector<float>(Nlines,-1); // Nlines = NlinesLeft + NlinesRight
-        mvuRightLineEnd = vector<float>(Nlines,-1);   // Nlines = NlinesLeft + NlinesRight
     }
     if(NlinesRight>0)
     {
